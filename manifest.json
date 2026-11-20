@@ -1,0 +1,120 @@
+{
+  "manifest_version": 1,
+  "id": "cn.ucbk.proactive_chat",
+  "name": "主动消息",
+  "version": "1.2.0",
+  "description": "机器人自己判断要不要开口。群聊或私聊沉默到设定时长后，先让 AI 评分，再按插话概率决定是否真的开口。连续主动若干次没人回应就暂停，等用户开口再恢复。",
+  "author": {
+    "name": "UCBK",
+    "url": "https://www.ucbk.cn"
+  },
+  "license": "MIT",
+  "entry": "plugin.py",
+  "category": "entertainment",
+  "capabilities": [
+    "msg.send",
+    "msg.history",
+    "llm.generate",
+    "plugin.storage",
+    "scheduler.register",
+    "cache.kv"
+  ],
+  "config_schema": [
+    {
+      "key": "silence_minutes",
+      "label": "沉默多久后主动开口（分钟，1～1440，测试可填 1）",
+      "type": "number",
+      "default": 10,
+      "required": false,
+      "sensitive": false
+    },
+    {
+      "key": "max_unanswered",
+      "label": "连续几次没人理就暂停（1～20）",
+      "type": "number",
+      "default": 3,
+      "required": false,
+      "sensitive": false
+    },
+    {
+      "key": "tick_seconds",
+      "label": "巡检间隔（秒，最小 10）",
+      "type": "number",
+      "default": 30,
+      "required": false,
+      "sensitive": false
+    },
+    {
+      "key": "score_enabled",
+      "label": "开口前先评分，通过才发（关闭则沉默到点就发）",
+      "type": "switch",
+      "default": true,
+      "required": false,
+      "sensitive": false
+    },
+    {
+      "key": "speak_probability",
+      "label": "插话概率（0～1，0.4 表示只有四成机会真的说）",
+      "type": "number",
+      "default": 0.4,
+      "required": false,
+      "sensitive": false
+    },
+    {
+      "key": "group_chat_enabled",
+      "label": "群聊主动",
+      "type": "switch",
+      "default": true,
+      "required": false,
+      "sensitive": false
+    },
+    {
+      "key": "friend_chat_enabled",
+      "label": "私聊主动",
+      "type": "switch",
+      "default": true,
+      "required": false,
+      "sensitive": false
+    },
+    {
+      "key": "history_limit",
+      "label": "参考最近几条聊天（1～30）",
+      "type": "number",
+      "default": 12,
+      "required": false,
+      "sensitive": false
+    },
+    {
+      "key": "quiet_hours_enabled",
+      "label": "开启免打扰时段",
+      "type": "switch",
+      "default": true,
+      "required": false,
+      "sensitive": false
+    },
+    {
+      "key": "quiet_hours",
+      "label": "免打扰时段（24小时制，如 23:00-07:00）",
+      "type": "text",
+      "default": "23:00-07:00",
+      "required": false,
+      "sensitive": false
+    },
+    {
+      "key": "group_motivation",
+      "label": "群聊主动时的动机提示词",
+      "type": "textarea",
+      "default": "",
+      "required": false,
+      "sensitive": false
+    },
+    {
+      "key": "friend_motivation",
+      "label": "私聊主动时的动机提示词",
+      "type": "textarea",
+      "default": "",
+      "required": false,
+      "sensitive": false
+    }
+  ]
+}
