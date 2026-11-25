@@ -143,7 +143,13 @@ async def handle_message(event: dict[str, Any], host: Any) -> None:
 
 
 async def _should_speak(host: Any, chat_type: str, target_id: str, history: str) -> bool:
-    """评分：此刻主动说一句是否自然；AI 异常时按不发言处理。"""
+    """评分：群聊判断此刻开口是否自然；私聊跳过，交给插话概率决定。
+
+    AI 异常时群聊按不发言处理。
+    """
+    # 私聊冷场是常态，没有「群聊氛围」可判断，评分器对私聊只会一直拦。
+    if chat_type == "friend":
+        return True
     if not config_bool(host, "score_enabled", True):
         return True
     unanswered = 0
@@ -176,21 +182,34 @@ def _probability_hit(host: Any, key: str, default: float) -> bool:
     return random.random() < probability
 
 
+def _clip_message(text: str, limit: int = 1000) -> str:
+    """超长时断在标点处，别把一句话切一半。"""
+    value = str(text or "").strip()
+    if len(value) <= limit:
+        return value
+    cut = value[:limit]
+    for marker in ("。", "！", "？", "；", "\n"):
+        position = cut.rfind(marker)
+        if position >= limit // 2:
+            return cut[: position + 1]
+    return cut
+
+
 async def _run_one(host: Any, chat_type: str, target_id: str, generation: int) -> None:
     """对单个沉默会话走完整主动流程：评分 → 生成 → 发送 → 记数。"""
     if generation != current_generation():
         return
     key = session_key(chat_type, target_id)
+    # 先掷骰子：概率没中就别花历史读取和评分的模型调用。
+    # 默认 0.4 时六成巡检在这里就结束。
+    if not _probability_hit(host, "speak_probability", 0.4):
+        host.log(f"主动聊天插话概率未命中，本轮跳过，会话={key}", "info")
+        return
     history = await _read_history(host, chat_type, target_id)
     if generation != current_generation():
         return
     if not await _should_speak(host, chat_type, target_id, history):
         host.log(f"主动聊天评分未通过，会话={key}", "info")
-        return
-    # 插话概率：评分通过不代表一定开口，按配置掷一次骰子。
-    # 这是「随机插话」的关键——沉默到点但概率没中，就静默跳过本轮。
-    if not _probability_hit(host, "speak_probability", 0.4):
-        host.log(f"主动聊天插话概率未命中，本轮跳过，会话={key}", "info")
         return
 
     unanswered = 0
@@ -216,7 +235,7 @@ async def _run_one(host: Any, chat_type: str, target_id: str, generation: int) -
 
     if generation != current_generation():
         return
-    sent = await safe_send(host, chat_type, target_id, str(text or "").strip()[:1000])
+    sent = await safe_send(host, chat_type, target_id, _clip_message(str(text or "")))
     if not sent:
         await _record_failure(host, key, "主动消息发送失败")
         return

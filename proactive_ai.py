@@ -13,6 +13,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, TypeVar
 
 MAX_PROMPT_CHARS = 3900
+MAX_MOTIVATION_CHARS = 800
+MAX_HISTORY_CHARS = 2200
 MAX_AI_ATTEMPTS = 3
 ParsedResult = TypeVar("ParsedResult")
 
@@ -60,6 +62,24 @@ class ProactiveAiJsonError(ProactiveAiError):
     """AI 输出不是合法 JSON，可有限重试。"""
 
 
+def clip_history(history_lines: str, budget: int = MAX_HISTORY_CHARS) -> str:
+    """按字符预算裁剪聊天流水，从最新一条往前留。
+
+    流水从旧到新，靠后的内容更贴近当下。预算不够时丢旧的整行，
+    不截半句，也不动提示词末尾的格式指令。
+    """
+    lines = [line for line in str(history_lines or "").splitlines() if line.strip()]
+    kept: list[str] = []
+    used = 0
+    for line in reversed(lines):
+        cost = len(line) + 1
+        if used + cost > budget:
+            break
+        kept.append(line)
+        used += cost
+    return "\n".join(reversed(kept))
+
+
 def _strip_code_fence(text: str) -> str:
     """去掉 AI 偶尔包上的代码块。"""
     value = str(text or "").strip()
@@ -71,17 +91,21 @@ def _strip_code_fence(text: str) -> str:
 
 
 def parse_score(text: str) -> bool:
-    """解析评分结果；非严格 JSON 或字段错误都当「不开口」。"""
+    """解析评分结果；非严格 JSON 或必需字段缺失都当「不开口」。
+
+    模型多吐一个字段不算错，只要 speak 和 reason 可用就照常采信。
+    """
     raw = _strip_code_fence(text)
     try:
         value = json.loads(raw)
     except (TypeError, ValueError) as error:
         raise ProactiveAiJsonError("评分返回不是合法 JSON") from error
-    if not isinstance(value, dict) or set(value) != {"speak", "reason"}:
-        raise ProactiveAiJsonError("评分字段不是 speak + reason")
+    if not isinstance(value, dict):
+        raise ProactiveAiJsonError("评分返回不是 JSON 对象")
     speak = value.get("speak")
-    if not isinstance(speak, bool) or not isinstance(value.get("reason"), str):
-        raise ProactiveAiJsonError("评分字段类型不对")
+    reason = value.get("reason")
+    if not isinstance(speak, bool) or not isinstance(reason, str):
+        raise ProactiveAiJsonError("评分缺少 speak 或 reason，或字段类型不对")
     return speak
 
 
@@ -94,6 +118,8 @@ def motivation_prompt(
     )
     key = "group_motivation" if chat_type == "group" else "friend_motivation"
     motivation = str(host.config.get(key) or "").strip() or default
+    # 自定义动机写在 textarea 里，没有长度限制，先按预算裁掉尾巴。
+    motivation = motivation[:MAX_MOTIVATION_CHARS]
     now = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
     scene = "群聊" if chat_type == "group" else "私聊"
     dynamic = (
@@ -103,9 +129,10 @@ def motivation_prompt(
         f"- 已主动发言但没人回应的次数：{unanswered_count}\n"
         "</dynamic_context>"
     )
+    history = clip_history(history_lines) or "（暂无聊天记录）"
     body = (
         f"{motivation}\n\n{dynamic}\n\n"
-        f"[最近聊天流水，从旧到新]\n{history_lines or '（暂无聊天记录）'}\n"
+        f"[最近聊天流水，从旧到新]\n{history}\n"
         "[聊天流水结束]\n\n"
         "只输出要发送的那句话本身，不要标题、解释或动作描述。"
     )
@@ -114,13 +141,15 @@ def motivation_prompt(
 
 def score_prompt(history_lines: str, unanswered_count: int) -> str:
     """拼评分提示词，带上聊天流水与已主动次数。"""
+    history = clip_history(history_lines) or "（暂无聊天记录）"
     body = (
         "[最近聊天流水，从旧到新]\n"
-        f"{history_lines or '（暂无聊天记录）'}\n"
+        f"{history}\n"
         "[聊天流水结束]\n\n"
         + SCORE_HINT.format(count=unanswered_count)
         + "\n只返回 {\"speak\":true/false,\"reason\":\"简短原因\"}。"
     )
+    # 历史已按预算裁剪，这里是兜底；尾部格式指令不会再被切掉。
     return body[:MAX_PROMPT_CHARS]
 
 

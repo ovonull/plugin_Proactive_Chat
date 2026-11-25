@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import time
 import traceback
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -21,11 +22,13 @@ DEFAULT_SILENCE_MINUTES = 10
 DEFAULT_MAX_UNANSWERED = 3
 DEFAULT_HISTORY_LIMIT = 12
 MAX_STORAGE_UPDATE_ATTEMPTS = 4
+REGISTER_MIN_INTERVAL = 60.0
 
 # 后台任务代次：源码重载后旧任务作废，避免同一会话重复发送。
 _generation: int = 0
 _store_lock: asyncio.Lock | None = None
 _background_tasks: set[asyncio.Task] = set()
+_last_register_at: float = 0.0
 
 
 def next_generation() -> int:
@@ -129,11 +132,19 @@ def quiet_now(host: Any) -> bool:
 
 
 async def register_tick(host: Any) -> None:
-    """幂等登记巡检任务，调用方不要持状态锁。"""
+    """幂等登记巡检任务，调用方不要持状态锁。
+
+    真人每说一句都会走到这里，一分钟内只调一次宿主，别把 schedule 当心跳打。
+    """
+    global _last_register_at
+    now = time.monotonic()
+    if 0 < _last_register_at and now - _last_register_at < REGISTER_MIN_INTERVAL:
+        return
     tick = config_int(host, "tick_seconds", DEFAULT_TICK_SECONDS, 10, 3600)
     await host.schedule(
         SCHEDULE_EVENT, tick, {"kind": "proactive_scan"}, preserve_next_run=True
     )
+    _last_register_at = time.monotonic()
 
 
 async def load_state(host: Any) -> dict[str, Any]:

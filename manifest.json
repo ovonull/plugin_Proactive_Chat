@@ -2,7 +2,7 @@
   "manifest_version": 1,
   "id": "cn.ucbk.proactive_chat",
   "name": "主动消息",
-  "version": "1.2.0",
+  "version": "1.2.2",
   "description": "机器人自己判断要不要开口。群聊或私聊沉默到设定时长后，先让 AI 评分，再按插话概率决定是否真的开口。连续主动若干次没人回应就暂停，等用户开口再恢复。",
   "author": {
     "name": "UCBK",
@@ -46,7 +46,7 @@
     },
     {
       "key": "score_enabled",
-      "label": "开口前先评分，通过才发（关闭则沉默到点就发）",
+      "label": "群聊开口前先评分，通过才发（私聊不评分，只看概率）",
       "type": "switch",
       "default": true,
       "required": false,
