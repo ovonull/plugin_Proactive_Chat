@@ -2,8 +2,8 @@
   "manifest_version": 1,
   "id": "cn.ucbk.proactive_chat",
   "name": "主动消息",
-  "version": "1.2.2",
-  "description": "机器人自己判断要不要开口。群聊或私聊沉默到设定时长后，先让 AI 评分，再按插话概率决定是否真的开口。连续主动若干次没人回应就暂停，等用户开口再恢复。",
+  "version": "1.2.3",
+  "description": "基于会话沉默时长的主动发言机制。达到触发阈值后，经开口适宜性评估与概率采样决定是否生成并发送消息；连续主动未获响应达到上限即进入暂停态，待用户发言后复位。",
   "author": {
     "name": "UCBK",
     "url": "https://www.ucbk.cn"
@@ -22,7 +22,7 @@
   "config_schema": [
     {
       "key": "silence_minutes",
-      "label": "沉默多久后主动开口（分钟，1～1440，测试可填 1）",
+      "label": "沉默触发阈值（分钟，1～1440）",
       "type": "number",
       "default": 10,
       "required": false,
@@ -30,7 +30,7 @@
     },
     {
       "key": "max_unanswered",
-      "label": "连续几次没人理就暂停（1～20）",
+      "label": "未响应次数上限（1～20，达到后暂停主动）",
       "type": "number",
       "default": 3,
       "required": false,
@@ -38,7 +38,7 @@
     },
     {
       "key": "tick_seconds",
-      "label": "巡检间隔（秒，最小 10）",
+      "label": "巡检周期（秒，最小 10）",
       "type": "number",
       "default": 30,
       "required": false,
@@ -46,7 +46,7 @@
     },
     {
       "key": "score_enabled",
-      "label": "群聊开口前先评分，通过才发（私聊不评分，只看概率）",
+      "label": "群聊开口前评分（私聊豁免，仅按概率触发）",
       "type": "switch",
       "default": true,
       "required": false,
@@ -54,7 +54,7 @@
     },
     {
       "key": "speak_probability",
-      "label": "插话概率（0～1，0.4 表示只有四成机会真的说）",
+      "label": "插话概率（0～1，评分通过后的触发概率）",
       "type": "number",
       "default": 0.4,
       "required": false,
@@ -62,7 +62,7 @@
     },
     {
       "key": "group_chat_enabled",
-      "label": "群聊主动",
+      "label": "群聊主动发言",
       "type": "switch",
       "default": true,
       "required": false,
@@ -70,7 +70,7 @@
     },
     {
       "key": "friend_chat_enabled",
-      "label": "私聊主动",
+      "label": "私聊主动发言",
       "type": "switch",
       "default": true,
       "required": false,
@@ -78,7 +78,7 @@
     },
     {
       "key": "history_limit",
-      "label": "参考最近几条聊天（1～30）",
+      "label": "历史上下文条数（1～30，用于生成参考）",
       "type": "number",
       "default": 12,
       "required": false,
@@ -86,7 +86,7 @@
     },
     {
       "key": "quiet_hours_enabled",
-      "label": "开启免打扰时段",
+      "label": "启用免打扰时段",
       "type": "switch",
       "default": true,
       "required": false,
@@ -94,7 +94,7 @@
     },
     {
       "key": "quiet_hours",
-      "label": "免打扰时段（24小时制，如 23:00-07:00）",
+      "label": "免打扰时段（24 小时制，如 23:00-07:00）",
       "type": "text",
       "default": "23:00-07:00",
       "required": false,
@@ -102,7 +102,7 @@
     },
     {
       "key": "group_motivation",
-      "label": "群聊主动时的动机提示词",
+      "label": "群聊发言动机提示词",
       "type": "textarea",
       "default": "",
       "required": false,
@@ -110,7 +110,7 @@
     },
     {
       "key": "friend_motivation",
-      "label": "私聊主动时的动机提示词",
+      "label": "私聊发言动机提示词",
       "type": "textarea",
       "default": "",
       "required": false,
